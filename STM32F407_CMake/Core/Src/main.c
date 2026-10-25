@@ -18,12 +18,16 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "i2c.h"
 #include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "stdio.h"
+#include "string.h"
+#include "mpu6050.h"
+#include "usbd_cdc_if.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,7 +48,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+MPU6050_t mpu;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -55,7 +59,12 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+static void usb_print(const char *s)
+{
+    uint32_t t = HAL_GetTick();
+    while (CDC_Transmit_FS((uint8_t *)s, strlen(s)) == USBD_BUSY &&
+           (HAL_GetTick() - t) < 50) { }
+}
 /* USER CODE END 0 */
 
 /**
@@ -88,8 +97,15 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USB_DEVICE_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_Delay(1000);   /* cho PC nhan cong COM */
+  while (MPU6050_Init(&hi2c1) != HAL_OK) {
+      usb_print("MPU6050 khong phan hoi!\r\n");
+      HAL_Delay(1000);
+  }
+  usb_print("Dang hieu chuan gyro, giu yen board...\r\n");
+  MPU6050_CalibrateGyro(&hi2c1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -99,9 +115,16 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_6);
-    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_7);
-    HAL_Delay(100);
+    if (MPU6050_ReadAll(&hi2c1, &mpu) == HAL_OK) {
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                "%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.1f,%.2f,%.2f\r\n",
+                mpu.ax, mpu.ay, mpu.az, mpu.gx, mpu.gy, mpu.gz,
+                mpu.temp, mpu.roll, mpu.pitch);
+        usb_print(msg);
+    }
+    HAL_Delay(500);
+
   }
   /* USER CODE END 3 */
 }
