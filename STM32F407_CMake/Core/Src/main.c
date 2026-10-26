@@ -48,7 +48,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-MPU6050_t mpu;
+MPU6050_sensor mpu;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -99,12 +99,12 @@ int main(void)
   MX_USB_DEVICE_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(1000);   /* cho PC nhan cong COM */
+  HAL_Delay(1000);   /* wait for USB CDC to be ready */
   while (MPU6050_Init(&hi2c1) != HAL_OK) {
-      usb_print("MPU6050 khong phan hoi!\r\n");
+      usb_print("MPU6050 not responding!\r\n");
       HAL_Delay(1000);
   }
-  usb_print("Dang hieu chuan gyro, giu yen board...\r\n");
+  usb_print("Calibrating gyroscope, keep board still...\r\n");
   MPU6050_CalibrateGyro(&hi2c1);
   /* USER CODE END 2 */
 

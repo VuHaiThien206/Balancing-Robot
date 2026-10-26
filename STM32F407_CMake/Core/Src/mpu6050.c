@@ -1,11 +1,11 @@
 #include "mpu6050.h"
 #include <math.h>
 
-/* ---- Cau hinh ---- */
-#define MPU6050_ADDR        (0x68 << 1)   /* AD0 = GND. Neu AD0 = 3.3V: (0x69 << 1) */
+/* ---- Config ---- */
+#define MPU6050_ADDR        (0x68 << 1)   /* AD0 = GND. If AD0 = 3.3V: (0x69 << 1) */
 #define MPU6050_TIMEOUT_MS  100U
 
-/* ---- Thanh ghi ---- */
+/* ---- Registers ---- */
 #define REG_SMPLRT_DIV      0x19
 #define REG_CONFIG          0x1A
 #define REG_GYRO_CONFIG     0x1B
@@ -14,17 +14,18 @@
 #define REG_PWR_MGMT_1      0x6B
 #define REG_WHO_AM_I        0x75
 
-/* ---- He so quy doi (accel +-2g, gyro +-250 do/s) ---- */
+/* ---- ON DEVELOPMENT ---- */
+/* ---- Conversion factors (accel +-2g, gyro +-250 deg/s) ---- */
 #define ACCEL_LSB_PER_G     16384.0f
 #define GYRO_LSB_PER_DPS    131.0f
 
 #define RAD_TO_DEG_F        57.2957795f
-#define COMP_ALPHA          0.98f         /* ti trong cua gyro trong bo loc */
+#define COMP_ALPHA          0.98f
 
-/* Offset gyro do duoc bang MPU6050_CalibrateGyro (don vi do/s) */
+/* Offset gyro measured by MPU6050_CalibrateGyro (unit: deg/s)*/
 static float gyro_off_x = 0.0f, gyro_off_y = 0.0f, gyro_off_z = 0.0f;
 
-/* Trang thai bo loc */
+/* Filter status */
 static uint8_t  filter_ready = 0;
 static uint32_t last_tick    = 0;
 static float    roll_f = 0.0f, pitch_f = 0.0f;
@@ -43,11 +44,11 @@ HAL_StatusTypeDef MPU6050_Init(I2C_HandleTypeDef *hi2c)
                          &id, 1, MPU6050_TIMEOUT_MS) != HAL_OK)
         return HAL_ERROR;
 
-    /* 0x68: MPU6050 that. 0x70/0x72: mot so module clone hoac MPU6500 */
+    /* 0x68: MPU6050 ready. 0x70/0x72: some clone modules or MPU6500 */
     if (id != 0x68 && id != 0x70 && id != 0x72)
         return HAL_ERROR;
 
-    if (write_reg(hi2c, REG_PWR_MGMT_1, 0x80) != HAL_OK)   /* reset thiet bi */
+    if (write_reg(hi2c, REG_PWR_MGMT_1, 0x80) != HAL_OK)   /* reset device */
         return HAL_ERROR;
     HAL_Delay(100);
 
@@ -68,7 +69,7 @@ HAL_StatusTypeDef MPU6050_Init(I2C_HandleTypeDef *hi2c)
     return HAL_OK;
 }
 
-HAL_StatusTypeDef MPU6050_ReadAll(I2C_HandleTypeDef *hi2c, MPU6050_t *d)
+HAL_StatusTypeDef MPU6050_ReadAll(I2C_HandleTypeDef *hi2c, MPU6050_sensor *d)
 {
     uint8_t buf[14];
 
@@ -94,7 +95,7 @@ HAL_StatusTypeDef MPU6050_ReadAll(I2C_HandleTypeDef *hi2c, MPU6050_t *d)
 
     d->temp = t / 340.0f + 36.53f;
 
-    /* ---- Goc roll/pitch tu accel ---- */
+    /* ---- Roll/Pitch from accelerometer ---- */
     float acc_roll  = atan2f(d->ay, d->az) * RAD_TO_DEG_F;
     float acc_pitch = atan2f(-d->ax, sqrtf(d->ay * d->ay + d->az * d->az)) * RAD_TO_DEG_F;
 
@@ -105,7 +106,7 @@ HAL_StatusTypeDef MPU6050_ReadAll(I2C_HandleTypeDef *hi2c, MPU6050_t *d)
         filter_ready = 1;
     } else {
         float dt = (now - last_tick) / 1000.0f;
-        if (dt <= 0.0f || dt > 0.5f) dt = 0.0f;   /* bo qua dt bat thuong */
+        if (dt <= 0.0f || dt > 0.5f) dt = 0.0f;   /* ignore invalid dt */
         roll_f  = COMP_ALPHA * (roll_f  + d->gx * dt) + (1.0f - COMP_ALPHA) * acc_roll;
         pitch_f = COMP_ALPHA * (pitch_f + d->gy * dt) + (1.0f - COMP_ALPHA) * acc_pitch;
     }
