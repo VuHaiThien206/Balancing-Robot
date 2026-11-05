@@ -1,0 +1,131 @@
+#include "balance.h"
+#include "motor.h"
+#include "pid.h"
+#include <math.h>
+
+/* =====================================================================
+ *  CONFIG  (adjust after looking at your own logs)
+ * ===================================================================== */
+
+/* Which tilt axis is the balance axis? 0 = pitch (gyro Y), 1 = roll (gyro X) */
+#define BAL_USE_ROLL        0
+
+/* Make "angle > 0" mean "robot leans FORWARD" (the direction the wheels must
+ * drive to get back under the body). Flip to -1 if the sign is wrong. */
+#define BAL_ANGLE_SIGN      (+1.0f)
+
+/* Balance angle in the sign-corrected frame (degrees). This is the angle where
+ * the robot stands by itself (centre of mass above the axle). Tune by hand. */
+#define BAL_SETPOINT_DEG    0.0f
+
+/* Safety */
+#define BAL_FALL_ANGLE      35.0f   /* beyond this from setpoint: motors off */
+#define BAL_ARM_BAND        3.0f    /* must be within +-3 deg of setpoint ... */
+#define BAL_ARM_MS          500U    /* ... for 0.5 s to (re)start balancing */
+#define BAL_IMU_FAIL_MAX    3       /* consecutive IMU read failures -> motors off */
+
+/* Starting gains. Output unit = Motor_Set units (+-1000), angle in degrees.
+ * Tune in this order: Kp up until it starts oscillating, Kd to damp it,
+ * then a small Ki for steady drift. */
+#define BAL_KP              35.0f
+#define BAL_KI              0.0f
+#define BAL_KD              1.2f
+#define BAL_I_LIMIT         300.0f
+#define BAL_OUT_LIMIT       ((float)MOTOR_SPEED_MAX)
+
+/* ===================================================================== */
+
+static PID_Controller pid;
+static float    setpoint = BAL_SETPOINT_DEG;
+static int16_t  turn_cmd = 0;
+static uint8_t  armed = 0;
+static uint32_t arm_t0 = 0;
+static uint8_t  imu_fail = 0;
+static float    last_out = 0.0f;
+
+void Balance_Init(void)
+{
+    PID_Init(&pid, BAL_KP, BAL_KI, BAL_KD, BAL_I_LIMIT, BAL_OUT_LIMIT);
+    armed = 0;
+    arm_t0 = 0;
+    imu_fail = 0;
+    last_out = 0.0f;
+    Motor_Coast();
+}
+
+void Balance_SetGains(float kp, float ki, float kd)
+{
+    pid.kp = kp;
+    pid.ki = ki;
+    pid.kd = kd;
+}
+
+void Balance_SetSetpoint(float deg) { setpoint = deg; }
+void Balance_SetTurn(int16_t turn)  { turn_cmd = turn; }
+uint8_t Balance_IsArmed(void)       { return armed; }
+float Balance_GetOutput(void)       { return last_out; }
+
+static void disarm(void)
+{
+    armed = 0;
+    arm_t0 = 0;
+    last_out = 0.0f;
+    PID_Reset(&pid);
+    Motor_Coast();
+}
+
+void Balance_Update(const MPU6050_sensor *imu, uint8_t imu_ok)
+{
+    /* ---- IMU watchdog ---- */
+    if (!imu_ok) {
+        if (++imu_fail >= BAL_IMU_FAIL_MAX) disarm();
+        return;                         /* keep last motor command for 1-2 cycles */
+    }
+    imu_fail = 0;
+
+    /* ---- measurement ---- */
+#if BAL_USE_ROLL
+    float angle = BAL_ANGLE_SIGN * imu->roll;
+    float rate  = BAL_ANGLE_SIGN * imu->gx;
+#else
+    float angle = BAL_ANGLE_SIGN * imu->pitch;
+    float rate  = BAL_ANGLE_SIGN * imu->gy;
+#endif
+    float err = angle - setpoint;       /* > 0: leaning forward -> drive forward */
+    uint32_t now = HAL_GetTick();
+
+    /* ---- disarmed: wait until the robot is held upright ---- */
+    if (!armed) {
+        Motor_Coast();
+        if (fabsf(err) < BAL_ARM_BAND) {
+            if (arm_t0 == 0) arm_t0 = now;
+            if ((now - arm_t0) >= BAL_ARM_MS) {
+                PID_Reset(&pid);
+                armed = 1;
+            }
+        } else {
+            arm_t0 = 0;
+        }
+        return;
+    }
+
+    /* ---- fallen over ---- */
+    if (fabsf(err) > BAL_FALL_ANGLE) {
+        disarm();
+        return;
+    }
+
+    /* ---- PID ---- */
+    float dt = BAL_LOOP_MS / 1000.0f;
+    float u = PID_Update(&pid, err, rate, dt);
+    last_out = u;
+
+    int32_t l = (int32_t)u + turn_cmd;
+    int32_t r = (int32_t)u - turn_cmd;
+    if (l >  MOTOR_SPEED_MAX) l =  MOTOR_SPEED_MAX;
+    if (l < -MOTOR_SPEED_MAX) l = -MOTOR_SPEED_MAX;
+    if (r >  MOTOR_SPEED_MAX) r =  MOTOR_SPEED_MAX;
+    if (r < -MOTOR_SPEED_MAX) r = -MOTOR_SPEED_MAX;
+
+    Motor_Set((int16_t)l, (int16_t)r);
+}

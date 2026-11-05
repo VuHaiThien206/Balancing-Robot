@@ -30,18 +30,18 @@
 
 /* 1) DLPF inside the MPU: CONFIG = 4 -> accel 21 Hz / gyro 20 Hz (gyro rate 1 kHz)
  *    (was 3 = 44/42 Hz). Output rate stays 200 Hz (1 kHz / (1+4)). */
-#define MPU_DLPF_CFG        0x04
+#define MPU_DLPF_CFG        0x03        /* 44/42 Hz: lower delay for balancing */
 #define MPU_SMPLRT_DIV      0x04
 #define SAMPLE_PERIOD_MS    5U              /* 200 Hz, used by calibration loops */
 
 /* 3) Median filter window (odd). 5 samples kills single-sample spikes
  *    (e.g. the sample with gx=-3.29, gy=-1.63 in the log). */
-#define MED_N               5
+#define MED_N               3           /* 3 = only 1 sample of delay (was 5) */
 
 /* 4) EMA: y += alpha * (x - y). Smaller alpha = smoother but more lag.
  *    The gyro is already filtered by DLPF + median, so only a light EMA. */
 #define EMA_ALPHA_ACC       0.25f
-#define EMA_ALPHA_GYRO      0.50f
+#define EMA_ALPHA_GYRO      0.80f       /* less lag on the gyro (D term) */
 
 /* 5) Deadband (about 2-3 sigma of the noise), unit deg/s */
 #define DEADBAND_GX         0.40f
@@ -150,6 +150,48 @@ static void reset_filters(void)
     filter_ready = 0;
 }
 
+/* ---- Online gyro bias tracking (zero-velocity update) ----
+ * If the sensor stays still for STILL_WIN samples (gyro + |accel| almost constant),
+ * the mean gyro output is pure bias -> move the offset toward it. */
+#define STILL_WIN           100
+#define STILL_RANGE_DPS     0.6f      /* max (max-min) of each gyro axis in the window */
+#define STILL_RANGE_G       0.02f     /* max (max-min) of |accel| in the window */
+#define STILL_MAX_BIAS_DPS  10.0f     /* never "correct" more than this */
+#define STILL_GAIN          0.5f
+
+static struct { float mn[4], mx[4], sum[3]; uint16_t n; } still;
+
+static void still_track(void)
+{
+    float amag = sqrtf(ema_y[0]*ema_y[0] + ema_y[1]*ema_y[1] + ema_y[2]*ema_y[2]);
+    float v[4] = { ema_y[3], ema_y[4], ema_y[5], amag };
+
+    if (still.n == 0) {
+        for (int k = 0; k < 4; k++) { still.mn[k] = still.mx[k] = v[k]; }
+        still.sum[0] = still.sum[1] = still.sum[2] = 0.0f;
+    }
+    for (int k = 0; k < 4; k++) {
+        if (v[k] < still.mn[k]) still.mn[k] = v[k];
+        if (v[k] > still.mx[k]) still.mx[k] = v[k];
+        float th = (k < 3) ? STILL_RANGE_DPS : STILL_RANGE_G;
+        if (still.mx[k] - still.mn[k] > th) { still.n = 0; return; }   /* moving */
+    }
+    for (int k = 0; k < 3; k++) still.sum[k] += v[k];
+
+    if (++still.n < STILL_WIN) return;
+    still.n = 0;
+
+    float c[3];
+    for (int k = 0; k < 3; k++) {
+        c[k] = STILL_GAIN * still.sum[k] / STILL_WIN;
+        if (fabsf(c[k]) > STILL_MAX_BIAS_DPS) return;
+    }
+    gyro_off_x += c[0];  gyro_off_y += c[1];  gyro_off_z += c[2];
+    for (int k = 0; k < 3; k++) ema_y[3 + k] -= c[k];     /* keep output continuous */
+    kf_roll.bias  -= c[0];                                 /* Kalman bias is relative to offset */
+    kf_pitch.bias -= c[1];
+}
+
 static inline float deadband(float v, float th)
 {
     return (fabsf(v) < th) ? 0.0f : v;
@@ -229,6 +271,8 @@ HAL_StatusTypeDef MPU6050_ReadAll(I2C_HandleTypeDef *hi2c, MPU6050_sensor *d)
         else               ema_y[i] += a * (m - ema_y[i]);
     }
 
+    if (filter_ready) still_track();
+
     d->ax = ema_y[0];
     d->ay = ema_y[1];
     d->az = ema_y[2];
@@ -289,7 +333,8 @@ HAL_StatusTypeDef MPU6050_CalibrateGyro(I2C_HandleTypeDef *hi2c)
     uint8_t buf[6];
     int ok = 0;
 
-    gyro_off_x = gyro_off_y = gyro_off_z = 0.0f;
+    /* NOTE: offsets are NOT cleared here: this loop reads raw registers, and on
+     * failure (sensor moving / I2C error) the previous offsets must stay valid. */
 
     for (int i = 0; i < CAL_SAMPLES; i++) {
         if (HAL_I2C_Mem_Read(hi2c, MPU6050_ADDR, REG_GYRO_XOUT_H, I2C_MEMADD_SIZE_8BIT,
