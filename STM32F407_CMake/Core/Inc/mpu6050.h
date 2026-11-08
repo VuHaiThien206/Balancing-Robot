@@ -17,6 +17,10 @@ typedef struct {
     float gx, gy, gz;      /* angular velocity, degrees/s */
     float temp;            /* temperature, degrees C */
 
+    /* Unfiltered angular velocity (only the gyro offset removed, no median/EMA/deadband).
+     * Low latency: used by the balance D term and the yaw loop. */
+    float gx_fast, gy_fast, gz_fast;
+
     float roll, pitch;     /* tilt angles, degrees (Kalman filter + output deadband) */
     float roll_acc, pitch_acc; /* angles from accelerometer only (for debugging) */
     float bias_x, bias_y;      /* gyro bias estimated online by Kalman (deg/s) */

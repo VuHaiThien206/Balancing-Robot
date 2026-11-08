@@ -25,30 +25,37 @@
 #endif
 
 /* ---- Tuning ---- */
-/* Motors usually do not move below some duty. Non-zero commands are mapped to
- * [MOTOR_DEADZONE .. MOTOR_SPEED_MAX]. Find the real value by increasing the
- * speed slowly until the wheel just starts to turn (typical 100..250). */
-#define MOTOR_DEADZONE      150
+/* Minimum PWM used to overcome static friction. Calibrate per motor by
+ * increasing the duty until the wheel starts moving reliably. */
+#define MOTOR_DEADZONE      700
 
+/* Ignore tiny PID commands caused by sensor noise. Above this threshold,
+ * apply the friction-compensated PWM mapping. */
 /* ---- Demo tuning ---- */
 #define DEMO_PEAK_SPEED     MOTOR_SPEED_MAX /* full speed (1000) */
 #define DEMO_RAMP_MS        0       /* 0 = jump straight to full speed (no ramp) */
 #define DEMO_HOLD_MS        30000   /* time held at peak speed */
 #define DEMO_STOP_MS        1500    /* brake pause before reversing (protects driver/motor) */
 
+/* Per-wheel strength trim in per mille (1000 = 100 %). If the robot keeps turning
+ * to one side, lower the scale of the STRONGER wheel (e.g. 900 = 90 %). */
+#define MOTOR_LEFT_SCALE    1000
+#define MOTOR_RIGHT_SCALE   1000
+
 typedef struct {
     GPIO_TypeDef *port_a;  uint16_t pin_a;   /* IN1 / IN3 */
     GPIO_TypeDef *port_b;  uint16_t pin_b;   /* IN2 / IN4 */
     uint32_t      channel;                   /* PWM channel (ENA / ENB) */
     uint8_t       inverted;
+    uint16_t      scale;                     /* per-wheel trim, per mille */
 } motor_t;
 
 static motor_t mot_left  = { MOT_L_IN1_GPIO_Port, MOT_L_IN1_Pin,
                              MOT_L_IN2_GPIO_Port, MOT_L_IN2_Pin,
-                             TIM_CHANNEL_1, 0 };
+                             TIM_CHANNEL_1, 0, MOTOR_LEFT_SCALE };
 static motor_t mot_right = { MOT_R_IN3_GPIO_Port, MOT_R_IN3_Pin,
                              MOT_R_IN4_GPIO_Port, MOT_R_IN4_Pin,
-                             TIM_CHANNEL_2, 0 };
+                             TIM_CHANNEL_2, 0, MOTOR_RIGHT_SCALE };
 
 static TIM_HandleTypeDef *tim = NULL;
 
@@ -90,7 +97,19 @@ static void drive_one(const motor_t *m, int16_t u)
     if (m->inverted) forward = !forward;
 
     uint32_t mag = (uint32_t)abs(u);
-    mag = MOTOR_DEADZONE + (mag * (MOTOR_SPEED_MAX - MOTOR_DEADZONE)) / MOTOR_SPEED_MAX;
+    if (mag <= MOTOR_COMMAND_DEADBAND) {
+        coast_one(m);
+        return;
+    }
+
+    /* Compensate for static friction instead of slowly ramping through a PWM
+     * range where the motor only hums but does not turn. */
+    mag = MOTOR_DEADZONE
+        + ((mag - MOTOR_COMMAND_DEADBAND) * (MOTOR_SPEED_MAX - MOTOR_DEADZONE))
+          / (MOTOR_SPEED_MAX - MOTOR_COMMAND_DEADBAND);
+
+    mag = (mag * m->scale) / 1000U;                 /* per-wheel trim */
+    if (mag > MOTOR_SPEED_MAX) mag = MOTOR_SPEED_MAX;
 
     HAL_GPIO_WritePin(m->port_a, m->pin_a, forward ? GPIO_PIN_SET   : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(m->port_b, m->pin_b, forward ? GPIO_PIN_RESET : GPIO_PIN_SET);

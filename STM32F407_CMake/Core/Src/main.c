@@ -40,7 +40,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define LOG_EVERY   20      /* print one log line every 20 control cycles (20 x 5 ms = 100 ms) */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,6 +52,8 @@
 
 /* USER CODE BEGIN PV */
 MPU6050_sensor mpu;
+extern USBD_HandleTypeDef hUsbDeviceFS;   /* defined in usb_device.c */
+static char log_buf[160];   /* must stay valid until USB finishes sending -> static */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -62,11 +64,27 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* Blocking print: only for start-up messages (before the control loop runs). */
 static void usb_print(const char *s)
 {
     uint32_t t = HAL_GetTick();
     while (CDC_Transmit_FS((uint8_t *)s, strlen(s)) == USBD_BUSY &&
            (HAL_GetTick() - t) < 50) { }
+}
+
+/* Non-blocking log: if USB is still busy, skip this line instead of waiting,
+ * so the 200 Hz control loop is never delayed. */
+static void log_try_send(void)
+{
+    USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef *)hUsbDeviceFS.pClassData;
+    if (hcdc == NULL || hcdc->TxState != 0) return;
+
+    snprintf(log_buf, sizeof(log_buf),
+             "%.3f\t,%.3f\t,%.3f\t,%.2f\t,%.2f\t,%.2f\t,%.1f\t,%.2f\t,%.2f\t,%.1f\t,%d\r\n",
+             mpu.ax, mpu.ay, mpu.az, mpu.gx, mpu.gy, mpu.gz,
+             mpu.temp, mpu.roll, mpu.pitch,
+             Balance_GetOutput(), Balance_IsArmed());
+    CDC_Transmit_FS((uint8_t *)log_buf, strlen(log_buf));
 }
 /* USER CODE END 0 */
 
@@ -110,9 +128,17 @@ int main(void)
       HAL_Delay(1000);
   }
   usb_print("Calibrating gyroscope, keep board still...\r\n");
-  MPU6050_CalibrateGyro(&hi2c1);
+  HAL_Delay(1000);   /* let the sensor settle before calibrating */
+  while (MPU6050_CalibrateGyro(&hi2c1) != HAL_OK) {
+      usb_print("Gyro calibration failed (moving?), retrying...\r\n");
+      HAL_Delay(500);
+  }
   Balance_Init();
- 
+  usb_print("Ready. Hold the robot upright to start balancing.\r\n");
+
+  uint32_t next = HAL_GetTick();   /* time of the next control cycle */
+  uint16_t log_div = 0;
+  uint8_t  i2c_fail = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -122,19 +148,31 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if (MPU6050_ReadAll(&hi2c1, &mpu) == HAL_OK) {
-        char msg[160];
-        snprintf(msg, sizeof(msg),
-                "%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.1f,%.2f,%.2f\r\n",
-                mpu.ax, mpu.ay, mpu.az, mpu.gx, mpu.gy, mpu.gz,
-                mpu.temp, mpu.roll, mpu.pitch);
-        usb_print(msg);
+    uint32_t now = HAL_GetTick();
+    if ((int32_t)(now - next) >= 0) {
+        next += BAL_LOOP_MS;
+        if ((int32_t)(now - next) > 50) next = now;   /* fell far behind: resync, no catch-up burst */
+
+        uint8_t ok = (MPU6050_ReadAll(&hi2c1, &mpu) == HAL_OK);
+        if (ok) {
+            i2c_fail = 0;
+        } else if (++i2c_fail >= 3) {      /* I2C bus probably locked up by motor noise: restart it */
+            i2c_fail = 0;
+            HAL_I2C_DeInit(&hi2c1);
+            __HAL_RCC_I2C1_FORCE_RESET();    /* hardware-reset the I2C peripheral (clears a stuck BUSY flag) */
+            __HAL_RCC_I2C1_RELEASE_RESET();
+            MX_I2C1_Init();
+            MPU6050_Init(&hi2c1);          /* re-configure the sensor (gyro offsets are kept) */
+        }
+        Balance_Update(&mpu, ok);
+
+        if (++log_div >= LOG_EVERY) {
+            log_div = 0;
+            log_try_send();
+        }
     }
-    HAL_Delay(500);
-    //Motor_DemoUpdate();
-    //HAL_Delay(10);
+    /* USER CODE END 3 */
   }
-  /* USER CODE END 3 */
 }
 
 /**

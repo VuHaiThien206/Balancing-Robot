@@ -10,6 +10,8 @@ extern "C" {
 /* Speed range for Motor_Set(): -MOTOR_SPEED_MAX .. +MOTOR_SPEED_MAX
  * (positive = forward, negative = reverse). */
 #define MOTOR_SPEED_MAX     1000
+#define MOTOR_COMMAND_DEADBAND 20
+#define MOTOR_MIN_ACTIVE_COMMAND (MOTOR_COMMAND_DEADBAND + 1)
 
 /* Start the PWM channels (CH1 = left/ENA, CH2 = right/ENB) of the given timer
  * and put both motors in coast. The timer must already be initialised by
@@ -17,8 +19,8 @@ extern "C" {
 void Motor_Init(TIM_HandleTypeDef *htim);
 
 /* Set speed of both motors. Values are clamped to +-MOTOR_SPEED_MAX.
- * 0 = coast (free-wheel). Non-zero values are mapped above the motor
- * dead zone (MOTOR_DEADZONE in motor.c). */
+ * 0 = coast (free-wheel). Small commands are ignored; larger commands are
+ * mapped above the static-friction compensation level in motor.c. */
 void Motor_Set(int16_t left, int16_t right);
 
 /* Active brake: both inputs high, enable at 100%. */

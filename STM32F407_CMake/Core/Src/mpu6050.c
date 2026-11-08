@@ -4,7 +4,7 @@
 
 /* ---- Config ---- */
 #define MPU6050_ADDR        (0x68 << 1)   /* AD0 = GND. If AD0 = 3.3V: (0x69 << 1) */
-#define MPU6050_TIMEOUT_MS  100U
+#define MPU6050_TIMEOUT_MS  10U     /* was 100: a failed read must not stall the 200 Hz loop for 100 ms */
 
 /* ---- Registers ---- */
 #define REG_SMPLRT_DIV      0x19
@@ -30,7 +30,7 @@
 
 /* 1) DLPF inside the MPU: CONFIG = 4 -> accel 21 Hz / gyro 20 Hz (gyro rate 1 kHz)
  *    (was 3 = 44/42 Hz). Output rate stays 200 Hz (1 kHz / (1+4)). */
-#define MPU_DLPF_CFG        0x03        /* 44/42 Hz: lower delay for balancing */
+#define MPU_DLPF_CFG        0x02        /* 94/98 Hz: lowest delay that is still usable (was 0x03 = 44/42 Hz) */
 #define MPU_SMPLRT_DIV      0x04
 #define SAMPLE_PERIOD_MS    5U              /* 200 Hz, used by calibration loops */
 
@@ -253,6 +253,11 @@ HAL_StatusTypeDef MPU6050_ReadAll(I2C_HandleTypeDef *hi2c, MPU6050_sensor *d)
     d->gz_raw = (int16_t)((buf[12] << 8) | buf[13]);
 
     d->temp = t / 340.0f + 36.53f;
+
+    /* low-latency gyro (offset removed only) */
+    d->gx_fast = d->gx_raw / GYRO_LSB_PER_DPS - gyro_off_x;
+    d->gy_fast = d->gy_raw / GYRO_LSB_PER_DPS - gyro_off_y;
+    d->gz_fast = d->gz_raw / GYRO_LSB_PER_DPS - gyro_off_z;
 
     /* ---- Step 1: convert + offset ---- */
     float x[6];
