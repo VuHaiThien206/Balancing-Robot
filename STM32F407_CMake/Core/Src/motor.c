@@ -8,12 +8,12 @@
  *    Right motor : ENB = TIM3_CH2 (PA7), IN3 = PB12, IN4 = PB13
  * --------------------------------------------------------------------- */
 #ifndef MOT_L_IN1_Pin
-#define MOT_L_IN1_GPIO_Port GPIOB
-#define MOT_L_IN1_Pin       GPIO_PIN_0
+#define MOT_L_IN1_GPIO_Port GPIOE
+#define MOT_L_IN1_Pin       GPIO_PIN_7
 #endif
 #ifndef MOT_L_IN2_Pin
-#define MOT_L_IN2_GPIO_Port GPIOB
-#define MOT_L_IN2_Pin       GPIO_PIN_1
+#define MOT_L_IN2_GPIO_Port GPIOE
+#define MOT_L_IN2_Pin       GPIO_PIN_8
 #endif
 #ifndef MOT_R_IN3_Pin
 #define MOT_R_IN3_GPIO_Port GPIOB

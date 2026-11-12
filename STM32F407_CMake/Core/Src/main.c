@@ -122,16 +122,16 @@ int main(void)
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   Motor_Init(&htim3);
-  HAL_Delay(1000);   /* wait for USB CDC to be ready */
+  HAL_Delay(100);   /* wait for USB CDC to be ready */
   while (MPU6050_Init(&hi2c1) != HAL_OK) {
       usb_print("MPU6050 not responding!\r\n");
-      HAL_Delay(1000);
+      HAL_Delay(100);
   }
   usb_print("Calibrating gyroscope, keep board still...\r\n");
-  HAL_Delay(1000);   /* let the sensor settle before calibrating */
+  HAL_Delay(100);   /* let the sensor settle before calibrating */
   while (MPU6050_CalibrateGyro(&hi2c1) != HAL_OK) {
       usb_print("Gyro calibration failed (moving?), retrying...\r\n");
-      HAL_Delay(500);
+      HAL_Delay(50);
   }
   Balance_Init();
   usb_print("Ready. Hold the robot upright to start balancing.\r\n");
