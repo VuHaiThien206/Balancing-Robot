@@ -20,7 +20,7 @@
 
 /* Balance angle in the sign-corrected frame (degrees). This is the angle where
  * the robot stands by itself (centre of mass above the axle). Tune by hand. */
-#define BAL_SETPOINT_DEG    1.8f
+#define BAL_SETPOINT_DEG    4.4f
 
 /* Safety */
 #define BAL_FALL_CUTOFF     0       /* 1 = stop motors when fallen; 0 = wheels keep running even if fallen */
@@ -36,9 +36,9 @@
  * Kp 300 -> 200 and Kd 6 -> 5: the log still shows bursts of +-1000 chatter
  * (gyro +-200 deg/s) caused by too much high-frequency gain for the loop delay.
  * Raise Kp again step by step only while the robot stays calm. */
-#define BAL_KP              10.0f // og 20.0 // og2 70//10
-#define BAL_KI              1.0f // og 1.0 // og2 20//0.5
-#define BAL_KD              0.3f // og 5.0  // og2 0.5//0.3
+#define BAL_KP              30.0f ///10
+#define BAL_KI              5.0f //0.5
+#define BAL_KD              5.0f //.3
 #define BAL_I_LIMIT         300.0f
 #define BAL_OUT_LIMIT       ((float)MOTOR_SPEED_MAX)
 

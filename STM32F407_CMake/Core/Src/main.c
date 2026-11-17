@@ -18,9 +18,11 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dma.h"
 #include "i2c.h"
 #include "tim.h"
-#include "usb_device.h"
+#include "usart.h"
+//#include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -28,7 +30,7 @@
 #include "stdio.h"
 #include "string.h"
 #include "mpu6050.h"
-#include "usbd_cdc_if.h"
+//#include "usbd_cdc_if.h"
 #include "motor.h"
 #include "balance.h"
 /* USER CODE END Includes */
@@ -52,8 +54,13 @@
 
 /* USER CODE BEGIN PV */
 MPU6050_sensor mpu;
-extern USBD_HandleTypeDef hUsbDeviceFS;   /* defined in usb_device.c */
-static char log_buf[160];   /* must stay valid until USB finishes sending -> static */
+//extern USBD_HandleTypeDef hUsbDeviceFS;   /* defined in usb_device.c */
+//static char log_buf[160];   /* must stay valid until USB finishes sending -> static */
+
+/* Bluetooth HM-10 log buffer */
+#define BLE_LOG_BUFFER_SIZE 160
+static char ble_log_buf[BLE_LOG_BUFFER_SIZE];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,7 +72,7 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 /* Blocking print: only for start-up messages (before the control loop runs). */
-static void usb_print(const char *s)
+/*static void usb_print(const char *s)
 {
     uint32_t t = HAL_GetTick();
     while (CDC_Transmit_FS((uint8_t *)s, strlen(s)) == USBD_BUSY &&
@@ -74,7 +81,7 @@ static void usb_print(const char *s)
 
 /* Non-blocking log: if USB is still busy, skip this line instead of waiting,
  * so the 200 Hz control loop is never delayed. */
-static void log_try_send(void)
+/*static void log_try_send(void)
 {
     USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef *)hUsbDeviceFS.pClassData;
     if (hcdc == NULL || hcdc->TxState != 0) return;
@@ -86,6 +93,35 @@ static void log_try_send(void)
              Balance_GetOutput(), Balance_IsArmed());
     CDC_Transmit_FS((uint8_t *)log_buf, strlen(log_buf));
 }
+
+/* Blocking print: only used before the control loop starts */
+static void ble_print(const char *s)
+{
+    HAL_UART_Transmit(&huart1,
+                      (uint8_t *)s,
+                      strlen(s),
+                      1000);
+}
+/* Non-blocking Bluetooth log */
+static void ble_log_try_send(void)
+{
+    if (huart1.gState != HAL_UART_STATE_READY)
+        return;
+
+    int len = snprintf(ble_log_buf,
+                       sizeof(ble_log_buf),
+                       "%.3f\rt%.1f\r\n",
+                       mpu.pitch,
+                       Balance_GetOutput());
+
+    if (len <= 0 || len >= sizeof(ble_log_buf))
+        return;
+
+    HAL_UART_Transmit_IT(&huart1,
+                         (uint8_t *)ble_log_buf,
+                         len);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -102,7 +138,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+    HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -117,24 +153,26 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USB_DEVICE_Init();
+  MX_DMA_Init();
+//  MX_USB_DEVICE_Init();
   MX_I2C1_Init();
   MX_TIM3_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   Motor_Init(&htim3);
   HAL_Delay(1000);   /* wait for USB CDC to be ready */
   while (MPU6050_Init(&hi2c1) != HAL_OK) {
-      usb_print("MPU6050 not responding!\r\n");
+      ble_print("MPU6050 not responding!\r\n");
       HAL_Delay(1000);
   }
-  usb_print("Calibrating gyroscope, keep board still...\r\n");
+  ble_print("Calibrating gyroscope, keep board still...\r\n");
   HAL_Delay(1000);   /* let the sensor settle before calibrating */
   while (MPU6050_CalibrateGyro(&hi2c1) != HAL_OK) {
-      usb_print("Gyro calibration failed (moving?), retrying...\r\n");
+      ble_print("Gyro calibration failed (moving?), retrying...\r\n");
       HAL_Delay(500);
   }
   Balance_Init();
-  usb_print("Ready. Hold the robot upright to start balancing.\r\n");
+  ble_print("Ready. Hold the robot upright to start balancing.\r\n");
 
   uint32_t next = HAL_GetTick();   /* time of the next control cycle */
   uint16_t log_div = 0;
@@ -168,11 +206,12 @@ int main(void)
 
         if (++log_div >= LOG_EVERY) {
             log_div = 0;
-            log_try_send();
+            ble_log_try_send();
         }
     }
-    /* USER CODE END 3 */
+
   }
+  /* USER CODE END 3 */
 }
 
 /**
