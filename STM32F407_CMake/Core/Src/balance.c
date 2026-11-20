@@ -36,9 +36,9 @@
  * Kp 300 -> 200 and Kd 6 -> 5: the log still shows bursts of +-1000 chatter
  * (gyro +-200 deg/s) caused by too much high-frequency gain for the loop delay.
  * Raise Kp again step by step only while the robot stays calm. */
-#define BAL_KP              30.0f ///10
-#define BAL_KI              5.0f //0.5
-#define BAL_KD              5.0f //.3
+#define BAL_KP              10.0f ///10
+#define BAL_KI              1.0f //0.5
+#define BAL_KD              0.15f //.3
 #define BAL_I_LIMIT         300.0f
 #define BAL_OUT_LIMIT       ((float)MOTOR_SPEED_MAX)
 
@@ -92,6 +92,16 @@ void Balance_SetSetpoint(float deg) { setpoint = deg; }
 void Balance_SetTurn(int16_t turn)  { turn_cmd = turn; }
 uint8_t Balance_IsArmed(void)       { return armed; }
 float Balance_GetOutput(void)       { return last_out; }
+
+/* ---- getters used by bt_cmd.c (initial values for the Bluetooth module) ---- */
+float Balance_GetSetpoint(void)     { return setpoint; }
+
+void Balance_GetGains(float *kp, float *ki, float *kd)
+{
+    *kp = pid.kp;
+    *ki = pid.ki;
+    *kd = pid.kd;
+}
 
 static void disarm(void)
 {

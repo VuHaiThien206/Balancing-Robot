@@ -31,6 +31,7 @@
 #include "string.h"
 #include "mpu6050.h"
 //#include "usbd_cdc_if.h"
+#include "bt_cmd.h"
 #include "motor.h"
 #include "balance.h"
 /* USER CODE END Includes */
@@ -172,6 +173,7 @@ int main(void)
       HAL_Delay(500);
   }
   Balance_Init();
+  BtCmd_Init(&huart1);   
   ble_print("Ready. Hold the robot upright to start balancing.\r\n");
 
   uint32_t next = HAL_GetTick();   /* time of the next control cycle */
@@ -186,6 +188,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    BtCmd_Process();
     uint32_t now = HAL_GetTick();
     if ((int32_t)(now - next) >= 0) {
         next += BAL_LOOP_MS;
@@ -206,7 +209,8 @@ int main(void)
 
         if (++log_div >= LOG_EVERY) {
             log_div = 0;
-            ble_log_try_send();
+            //ble_log_try_send();
+            BtCmd_SendTelemetry(mpu.pitch, Balance_GetOutput());
         }
     }
 
