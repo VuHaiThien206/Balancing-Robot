@@ -15,8 +15,8 @@
  * drive to get back under the body). Flip to -1 if the sign is wrong. */
 #define BAL_ANGLE_SIGN      (+1.0f)
 
-#define BAL_DEADBAND_DEG   7.0f   /* Suppress chatter within +-0.15 degrees */ //og 5
-//#define BAL_DEADZONE_DEG    10.0f  /* Suppress chatter within +-0.15 degrees */ // og 1
+//#define BAL_DEADBAND_DEG   7.0f   /* Suppress chatter within +-0.15 degrees */ //og 5
+//#define BAL_DEADZONE_DEG    0.15f  /* Suppress chatter within +-0.15 degrees */ // og 1
 
 /* Balance angle in the sign-corrected frame (degrees). This is the angle where
  * the robot stands by itself (centre of mass above the axle). Tune by hand. */
@@ -25,7 +25,7 @@
 /* Safety */
 #define BAL_FALL_CUTOFF     0       /* 1 = stop motors when fallen; 0 = wheels keep running even if fallen */
 #define BAL_FALL_ANGLE      35.0f   /* only used when BAL_FALL_CUTOFF = 1 */
-#define BAL_ARM_BAND        3.0f    /* must be within +-3 deg of setpoint ... */
+#define BAL_ARM_BAND        30.0f    /* must be within +-3 deg of setpoint ... */
 #define BAL_ARM_MS          500U    /* ... for 0.5 s to (re)start balancing */
 #define BAL_IMU_FAIL_MAX    20      /* consecutive IMU read failures (20 x 5 ms = 100 ms) -> motors off.
                                        Raised from 3 so a single I2C glitch from motor noise does not stop the wheels. */
@@ -131,10 +131,11 @@ void Balance_Update(const MPU6050_sensor *imu, uint8_t imu_ok)
     #endif
     
     float err = angle - setpoint;       /* > 0: leaning forward -> drive forward */
-    float gain_scale = 5.0f;
+//      if (fabsf(err) < BAL_DEADZONE_DEG) err = 0.0f;   /* suppress chatter near upright */
+//   float gain_scale = 5.0f;
     
-    if (is_recovering && fabsf(err) < 2.0f) is_recovering = false;
-    if (fabsf(err) > BAL_DEADBAND_DEG) is_recovering = true;
+//    if (is_recovering && fabsf(err) < 2.0f) is_recovering = false;
+//   if (fabsf(err) > BAL_DEADBAND_DEG) is_recovering = true;
      
     uint32_t now = HAL_GetTick();
 
@@ -172,7 +173,7 @@ void Balance_Update(const MPU6050_sensor *imu, uint8_t imu_ok)
     else            rate_f += BAL_RATE_LPF * (rate - rate_f);
 
     float u = PID_Update(&pid, err, rate_f, dt);
-    if (is_recovering) u *= gain_scale;
+//    if (is_recovering) u *= gain_scale;
 
     /* slew limit: the output may change by at most BAL_SLEW_PER_CYCLE per cycle,
      * so the wheels cannot flip from full forward to full reverse in one step */

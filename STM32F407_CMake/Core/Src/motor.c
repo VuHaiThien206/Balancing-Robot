@@ -27,15 +27,15 @@
 /* ---- Tuning ---- */
 /* Minimum PWM used to overcome static friction. Calibrate per motor by
  * increasing the duty until the wheel starts moving reliably. */
-#define MOTOR_DEADZONE      700
+#define MOTOR_DEADZONE      1000
 
 /* Ignore tiny PID commands caused by sensor noise. Above this threshold,
  * apply the friction-compensated PWM mapping. */
 /* ---- Demo tuning ---- */
 #define DEMO_PEAK_SPEED     MOTOR_SPEED_MAX /* full speed (1000) */
-#define DEMO_RAMP_MS        0       /* 0 = jump straight to full speed (no ramp) */
+#define DEMO_RAMP_MS        100       /* 0 = jump straight to full speed (no ramp) */
 #define DEMO_HOLD_MS        30000   /* time held at peak speed */
-#define DEMO_STOP_MS        1500    /* brake pause before reversing (protects driver/motor) */
+#define DEMO_STOP_MS        500    /* brake pause before reversing (protects driver/motor) */
 
 /* Per-wheel strength trim in per mille (1000 = 100 %). If the robot keeps turning
  * to one side, lower the scale of the STRONGER wheel (e.g. 900 = 90 %). */

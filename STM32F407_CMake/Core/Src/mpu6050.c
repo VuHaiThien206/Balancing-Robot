@@ -58,8 +58,8 @@
 
 /* Calibration limits */
 #define CAL_SAMPLES         400             /* 400 x 5 ms = 2 s */
-#define CAL_MAX_STD_DPS     0.8f            /* gyro std above this = sensor is moving */
-#define CAL_MAX_STD_G       0.02f           /* accel std above this = sensor is moving */
+#define CAL_MAX_STD_DPS     8.0f            /* gyro std above this = sensor is moving */
+#define CAL_MAX_STD_G       0.2f           /* accel std above this = sensor is moving */
 
 /* ---- 2) Offsets ---- */
 static float gyro_off_x = 0.0f, gyro_off_y = 0.0f, gyro_off_z = 0.0f;   /* deg/s */
