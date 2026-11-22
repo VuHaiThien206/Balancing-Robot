@@ -20,7 +20,7 @@
 
 /* Balance angle in the sign-corrected frame (degrees). This is the angle where
  * the robot stands by itself (centre of mass above the axle). Tune by hand. */
-#define BAL_SETPOINT_DEG    4.4f
+#define BAL_SETPOINT_DEG    4.433f
 
 /* Safety */
 #define BAL_FALL_CUTOFF     0       /* 1 = stop motors when fallen; 0 = wheels keep running even if fallen */
@@ -36,9 +36,9 @@
  * Kp 300 -> 200 and Kd 6 -> 5: the log still shows bursts of +-1000 chatter
  * (gyro +-200 deg/s) caused by too much high-frequency gain for the loop delay.
  * Raise Kp again step by step only while the robot stays calm. */
-#define BAL_KP              10.0f ///10
-#define BAL_KI              1.0f //0.5
-#define BAL_KD              0.15f //.3
+#define BAL_KP              1.0f ///10
+#define BAL_KI              5.0f //0.5
+#define BAL_KD              0.105f //.3
 #define BAL_I_LIMIT         300.0f
 #define BAL_OUT_LIMIT       ((float)MOTOR_SPEED_MAX)
 
@@ -193,13 +193,20 @@ void Balance_Update(const MPU6050_sensor *imu, uint8_t imu_ok)
     if (yaw_turn >  BAL_YAW_LIMIT) yaw_turn =  BAL_YAW_LIMIT;
     if (yaw_turn < -BAL_YAW_LIMIT) yaw_turn = -BAL_YAW_LIMIT;
 
-    int32_t base = (int32_t)u;
-    int32_t turn = (int32_t)turn_cmd + (int32_t)yaw_turn;
-    int32_t base_mag = (base < 0) ? -base : base;
-    int32_t max_turn = base_mag - MOTOR_MIN_ACTIVE_COMMAND;
-    if (max_turn < 0) max_turn = 0;
-    if (turn >  max_turn) turn =  max_turn;
-    if (turn < -max_turn) turn = -max_turn;
+        int32_t base = (int32_t)u;
+
+    /* Giảm chấn yaw chỉ hoạt động khi KHÔNG có lệnh rẽ từ điện thoại */
+    int32_t turn;
+    if (turn_cmd != 0) {
+        turn = (int32_t)turn_cmd;              /* lệnh rẽ của người dùng: không kẹp theo base */
+    } else {
+        turn = (int32_t)yaw_turn;              /* chỉ kẹp phần tự hiệu chỉnh yaw như cũ */
+        int32_t base_mag = (base < 0) ? -base : base;
+        int32_t max_turn = base_mag - MOTOR_MIN_ACTIVE_COMMAND;
+        if (max_turn < 0) max_turn = 0;
+        if (turn >  max_turn) turn =  max_turn;
+        if (turn < -max_turn) turn = -max_turn;
+    }
 
     /* Keep differential steering from cancelling the balance command on one
      * wheel near upright; both wheels must remain above the motor deadband. */

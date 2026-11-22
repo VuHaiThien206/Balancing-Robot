@@ -16,8 +16,8 @@ void  Balance_GetGains(float *kp, float *ki, float *kd);
 #define BT_RX_BUF_SIZE      128
 #define BT_LINE_MAX         32
 
-#define BT_LEAN_DEG         2.0f    /* setpoint offset while F / B is held (deg). Flip sign if F drives backwards */
-#define BT_TURN_CMD         150     /* turn command while L / R is held (output units). Flip sign if L/R are swapped */
+#define BT_LEAN_DEG         5.0f    /* lean degree */
+#define BT_TURN_CMD         50     /* turn speed */
 #define BT_CMD_TIMEOUT_MS   400     /* no move command for this long -> stop (web resends every 100 ms) */
 
 /* Limits for values received over Bluetooth */
