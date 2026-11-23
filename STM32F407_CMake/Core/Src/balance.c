@@ -20,11 +20,11 @@
 
 /* Balance angle in the sign-corrected frame (degrees). This is the angle where
  * the robot stands by itself (centre of mass above the axle). Tune by hand. */
-#define BAL_SETPOINT_DEG    4.433f
+#define BAL_SETPOINT_DEG    4.53f
 
 /* Safety */
-#define BAL_FALL_CUTOFF     0       /* 1 = stop motors when fallen; 0 = wheels keep running even if fallen */
-#define BAL_FALL_ANGLE      35.0f   /* only used when BAL_FALL_CUTOFF = 1 */
+#define BAL_FALL_CUTOFF     1       /* 1 = stop motors when fallen; 0 = wheels keep running even if fallen */
+#define BAL_FALL_ANGLE      40.0f   /* only used when BAL_FALL_CUTOFF = 1 */
 #define BAL_ARM_BAND        30.0f    /* must be within +-3 deg of setpoint ... */
 #define BAL_ARM_MS          500U    /* ... for 0.5 s to (re)start balancing */
 #define BAL_IMU_FAIL_MAX    20      /* consecutive IMU read failures (20 x 5 ms = 100 ms) -> motors off.
@@ -37,8 +37,8 @@
  * (gyro +-200 deg/s) caused by too much high-frequency gain for the loop delay.
  * Raise Kp again step by step only while the robot stays calm. */
 #define BAL_KP              1.0f ///10
-#define BAL_KI              5.0f //0.5
-#define BAL_KD              0.105f //.3
+#define BAL_KI              13.0f //0.5
+#define BAL_KD              0.1f //.3
 #define BAL_I_LIMIT         300.0f
 #define BAL_OUT_LIMIT       ((float)MOTOR_SPEED_MAX)
 

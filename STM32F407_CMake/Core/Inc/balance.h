@@ -8,7 +8,7 @@ extern "C" {
 #include "stm32f4xx_hal.h"
 #include "mpu6050.h"
 
-#define BAL_LOOP_MS     5U      /* control loop period: 200 Hz */
+#define BAL_LOOP_MS    5U      // 200hz // og5U
 
 void    Balance_Init(void);
 
