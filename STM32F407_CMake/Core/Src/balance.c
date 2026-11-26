@@ -23,7 +23,7 @@
 #define BAL_SETPOINT_DEG    4.53f
 
 /* Safety */
-#define BAL_FALL_CUTOFF     1       /* 1 = stop motors when fallen; 0 = wheels keep running even if fallen */
+#define BAL_FALL_CUTOFF     0       /* 1 = stop motors when fallen; 0 = wheels keep running even if fallen */
 #define BAL_FALL_ANGLE      40.0f   /* only used when BAL_FALL_CUTOFF = 1 */
 #define BAL_ARM_BAND        30.0f    /* must be within +-3 deg of setpoint ... */
 #define BAL_ARM_MS          500U    /* ... for 0.5 s to (re)start balancing */
